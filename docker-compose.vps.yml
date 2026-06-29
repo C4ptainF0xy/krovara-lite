@@ -1,0 +1,81 @@
+# Krovara — VPS overlay: run the production stack BEHIND the host's existing
+# system nginx (which owns :80/:443 + certbot TLS and serves other vhosts).
+#
+# Bring up (from the deploy dir, alongside the base file):
+#   docker compose -p krovara-new -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+#
+# What this overlay changes vs docker-compose.yml:
+#   1. Caddy stops binding :80/:443; it listens on 127.0.0.1:8088 (plain HTTP,
+#      auto_https off) and the system nginx proxies to it. Mounts Caddyfile.vps.
+#   2. The XMPP JID domain stays "krovara.local" (NOT the public host). It is
+#      purely internal (clients get their JID from /api/xmpp/token and connect
+#      over wss://krovara.com/xmpp-websocket), and every hardcoded
+#      `conference.krovara.local` query in the Go services depends on it.
+#   3. api's internal listener binds 0.0.0.0:8090 (not loopback) so the Prosody
+#      *container* can reach the auth callback at http://api:8090/internal/xmpp.
+#      8090 is never published to the host, so /internal/* stays private to the
+#      compose network.
+#   4. Prosody gets the mounts the base prod file was missing: community
+#      modules (mod_auth_http etc.), self-signed certs, and bot components.
+
+services:
+  # The distroless api/worker run as nonroot (UID 65532); a fresh named volume
+  # is root-owned, so their first mkdir under /data/krovara fails. Chown it
+  # once before they start. Idempotent — safe on every `up`.
+  files-init:
+    image: alpine:3
+    restart: "no"
+    command: ["sh", "-c", "mkdir -p /data/krovara && chown -R 65532:65532 /data/krovara"]
+    volumes:
+      - krovara-files:/data/krovara
+
+  api:
+    depends_on:
+      files-init:
+        condition: service_completed_successfully
+    environment:
+      # Reachable from the prosody container (base file binds loopback-only).
+      KROVARA_INTERNAL_ADDR: 0.0.0.0:8090
+      # Internal XMPP identity domain — keep .local (see header note #2).
+      KROVARA_XMPP_DOMAIN: krovara.local
+      KROVARA_XMPP_MUC_HOST: conference.krovara.local
+
+  worker:
+    depends_on:
+      files-init:
+        condition: service_completed_successfully
+    environment:
+      KROVARA_XMPP_DOMAIN: krovara.local
+      KROVARA_XMPP_MUC_HOST: conference.krovara.local
+
+  prosody:
+    environment:
+      # Base = http://<api-base>; mod_auth_http appends /check_password. The
+      # base prod file pointed at /internal/xmpp/auth which would 404.
+      KROVARA_XMPP_AUTH_URL: http://api:8090/internal/xmpp
+      PROSODY_HTTP_EXTERNAL_URL: https://${KROVARA_DOMAIN}/
+    # `prosodyctl status` needs a pidfile (unconfigured) so it always reports
+    # unhealthy though Prosody is up. Probe the c2s listener instead — the
+    # image has no curl/nc, but ss is present.
+    healthcheck:
+      test: ["CMD-SHELL", "ss -ltn | grep -q ':5222'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes: !override
+      - ./prosody/prosody.cfg.lua:/etc/prosody/prosody.cfg.lua:ro
+      - ./prosody/certs:/etc/prosody/certs:ro
+      - ./prosody/modules:/etc/prosody/community-modules:ro
+      - ./prosody/components.d:/etc/prosody/components.d:ro
+      - krovara-prosody:/var/lib/prosody
+
+  caddy:
+    # No public ports — only the loopback handoff to the system nginx.
+    ports: !override
+      - "127.0.0.1:8088:80"
+    volumes: !override
+      - ./caddy/Caddyfile.vps:/etc/caddy/Caddyfile:ro
+      - krovara-caddy-data:/data
+      - krovara-caddy-config:/config
+      - krovara-web-static:/srv:ro

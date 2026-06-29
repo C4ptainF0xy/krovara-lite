@@ -1,0 +1,15 @@
+{
+  "name": "Krovara",
+  "short_name": "Krovara",
+  "description": "Plateforme unifiée Gaming + Pro — messagerie, voix et communautés.",
+  "lang": "fr",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0F0F14",
+  "theme_color": "#0F0F14",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/krovara.png", "sizes": "733x720", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

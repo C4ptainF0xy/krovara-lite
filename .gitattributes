@@ -1,0 +1,11 @@
+# Keep LF on files executed/parsed on the Linux VPS, regardless of the
+# contributor's OS. A CRLF shebang or YAML/Caddyfile breaks on checkout there.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+Caddyfile   text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.lua       text eol=lf
+# Sourced by bash in dev (scripts/dev-run.sh: `. ./.env.dev`); a stray CR
+# makes the shell choke on `$'\r'`. Not covered above, so pin explicitly.
+.env*       text eol=lf

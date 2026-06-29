@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN badges TEXT[] NOT NULL DEFAULT '{}';

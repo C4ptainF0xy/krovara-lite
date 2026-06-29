@@ -1,0 +1,80 @@
+# Krovara — Caddy reverse proxy, "behind the host's system nginx" variant.
+#
+# The VPS already runs a system nginx that owns :80/:443 with certbot TLS and
+# serves several unrelated vhosts. Krovara cannot take those ports, so here
+# Caddy:
+#   - terminates NOTHING (auto_https off) — it speaks plain HTTP,
+#   - listens on :80 inside the container, mapped to 127.0.0.1:8088 on the host,
+#   - keeps doing ALL the app routing exactly like the standalone Caddyfile.
+# The system nginx terminates TLS for krovara.com and proxy_passes everything
+# to 127.0.0.1:8088. See docs/DEPLOYMENT.md + docker-compose.vps.yml.
+#
+# Routing:
+#   /healthz           → api:8080
+#   /api/*             → api:8080
+#   /voip/ws           → voip:8083     (WebSocket)
+#   /xmpp-websocket    → prosody:5280  (WebSocket)
+#   /upload/*          → prosody:5280
+#   /ntfy/*            → ntfy:80
+#   /                  → static SvelteKit bundle in /srv (SPA fallback)
+#
+# NOTE: the SPA fallback (root/try_files/file_server) MUST live inside its own
+# `handle {}` block. `try_files` is a rewrite — at the site level it runs before
+# the `handle @api` blocks and rewrites every path to /index.html, so the API
+# never gets routed. Wrapping it scopes the rewrite to the catch-all handler.
+
+{
+    # No public hostname, no ACME: the front nginx already did TLS.
+    auto_https off
+    # Trust the immediate upstream (nginx on the docker host) so Caddy honours
+    # the X-Forwarded-* / X-Real-IP it sets.
+    servers {
+        trusted_proxies static private_ranges
+    }
+}
+
+:80 {
+    encode zstd gzip
+
+    @health path /healthz
+    handle @health {
+        reverse_proxy api:8080
+    }
+
+    @api path /api/* /api
+    handle @api {
+        # nginx sets X-Real-IP to the real client; forward it so the API's
+        # rate-limit + anti-double-account signup signal see the true IP.
+        reverse_proxy api:8080 {
+            header_up X-Real-IP {http.request.header.X-Real-IP}
+        }
+    }
+
+    @ws path /xmpp-websocket
+    handle @ws {
+        reverse_proxy prosody:5280
+    }
+
+    @voip path /voip/ws
+    handle @voip {
+        reverse_proxy voip:8083
+    }
+
+    @upload path /upload/* /upload
+    handle @upload {
+        reverse_proxy prosody:5280
+    }
+
+    @ntfy path /ntfy/*
+    handle @ntfy {
+        uri strip_prefix /ntfy
+        reverse_proxy ntfy:80
+    }
+
+    # Static SvelteKit SPA — catch-all; client-side routes fall to index.html.
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

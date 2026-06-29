@@ -1,0 +1,22 @@
+# Sample Grafana alert rules (import via Grafana UI or provision).
+# This file is human-readable documentation; Grafana's alert provisioning
+# format is JSON under provisioning/alerting/ — keep the spec here and
+# materialize in JSON once we settle the rules.
+
+groups:
+  - name: krovara-api
+    interval: 1m
+    rules:
+      - alert: ApiHigh5xxRate
+        # Fires when 5xx exceed 1% of all requests over 5 minutes.
+        expr: |
+          sum(rate(krovara_http_requests_total{status_class="5xx"}[5m]))
+            /
+          sum(rate(krovara_http_requests_total[5m]))
+            > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Krovara API 5xx rate above 1%"
+          notify: "ntfy://krovara-alerts"

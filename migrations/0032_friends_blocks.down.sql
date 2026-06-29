@@ -1,0 +1,3 @@
+ALTER TABLE users DROP COLUMN who_can_add;
+DROP TABLE IF EXISTS blocks;
+DROP TABLE IF EXISTS friendships;

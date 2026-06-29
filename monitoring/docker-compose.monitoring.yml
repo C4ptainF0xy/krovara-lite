@@ -1,0 +1,72 @@
+# Krovara — monitoring overlay (optional).
+#
+# Bring up alongside the main stack:
+#   docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d
+#
+# Stack: VictoriaMetrics (scrapes Prometheus endpoints), Loki (log store),
+# Promtail (ships Docker logs), Grafana (UI), Uptime Kuma (public status page
+# probing /healthz). Grafana is exposed on :3000 (firewall it / SSH-tunnel);
+# Uptime Kuma is published only on 127.0.0.1 and served publicly through Caddy
+# at status.<KROVARA_DOMAIN> (see caddy/Caddyfile).
+
+services:
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.106.1
+    restart: unless-stopped
+    command:
+      - -storageDataPath=/storage
+      - -promscrape.config=/etc/vm/prometheus.yml
+      - -retentionPeriod=30d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/vm/prometheus.yml:ro
+      - krovara-vm:/storage
+
+  loki:
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/loki.yml:ro
+      - krovara-loki:/loki
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [loki]
+
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?required}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./monitoring/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards:ro
+      - krovara-grafana:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on: [victoriametrics, loki]
+
+  # Public status page (the schema's observability layer). Served publicly via
+  # Caddy at status.<KROVARA_DOMAIN>; the raw port is bound to loopback only.
+  # Monitors + admin account are configured in the UI on first run (Uptime Kuma
+  # has no declarative provisioning) — see docs/DEPLOYMENT.md §10.
+  uptime-kuma:
+    image: louislam/uptime-kuma:1.23.16
+    restart: unless-stopped
+    volumes:
+      - krovara-uptimekuma:/app/data
+    ports:
+      - "127.0.0.1:3001:3001"
+
+volumes:
+  krovara-vm:
+  krovara-loki:
+  krovara-grafana:
+  krovara-uptimekuma:

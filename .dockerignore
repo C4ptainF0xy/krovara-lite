@@ -1,0 +1,9 @@
+.git
+.svelte-kit
+node_modules
+web/node_modules
+web/.svelte-kit
+web/build
+prosody/certs
+prosody/data
+*.md

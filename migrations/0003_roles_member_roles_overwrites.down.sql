@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS channel_overwrites;
+DROP TABLE IF EXISTS member_roles;
+DROP TABLE IF EXISTS roles;

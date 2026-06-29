@@ -1,0 +1,1 @@
+ALTER TABLE reports ADD COLUMN assigned_to UUID REFERENCES users(id) ON DELETE SET NULL;

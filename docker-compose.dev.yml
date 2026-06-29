@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: krovara-postgres-dev
+    environment:
+      POSTGRES_USER: krovara
+      POSTGRES_PASSWORD: krovara
+      POSTGRES_DB: krovara
+    ports:
+      # Host has a local postgres on 5432, so map to 5433.
+      - "5433:5432"
+    volumes:
+      - krovara-pg-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U krovara -d krovara"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prosody:
+    image: prosody/prosody:latest
+    container_name: krovara-prosody-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PROSODY_DB_HOST: postgres
+      PROSODY_DB_PORT: "5432"
+      PROSODY_DB_NAME: krovara
+      PROSODY_DB_USER: krovara
+      PROSODY_DB_PASSWORD: krovara
+      PROSODY_HTTP_EXTERNAL_URL: "http://localhost:5280/"
+      # Dev: the Go API runs on the host at :8090. host.docker.internal is
+      # injected below for Linux compat — Win/Mac resolve it natively.
+      # mod_auth_http appends `/check_password` (and `/register`) to this
+      # base URL — so point it at the parent path, not at the handler.
+      KROVARA_XMPP_AUTH_URL: "${KROVARA_XMPP_AUTH_URL:-http://host.docker.internal:8090/internal/xmpp}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "5222:5222"   # client-to-server (XMPP)
+      - "5269:5269"   # server-to-server (federation)
+      - "5280:5280"   # HTTP / WebSocket / BOSH
+    volumes:
+      - ./prosody/prosody.cfg.lua:/etc/prosody/prosody.cfg.lua:ro
+      - ./prosody/certs:/etc/prosody/certs:ro
+      - ./prosody/modules:/etc/prosody/community-modules:ro
+      # Bot component snippets — written by the Go API on bot create/delete.
+      - ./prosody/components.d:/etc/prosody/components.d:ro
+      - krovara-prosody-data:/var/lib/prosody
+    healthcheck:
+      test: ["CMD", "prosodyctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.13
+    container_name: krovara-meili-dev
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-dev-meili-master-key-please-rotate}
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "7700:7700"
+    volumes:
+      - krovara-meili-dev:/meili_data
+
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    container_name: krovara-ntfy-dev
+    command: serve
+    environment:
+      NTFY_BASE_URL: http://localhost:8081
+      NTFY_LISTEN_HTTP: ":80"
+    ports:
+      - "8081:80"
+    volumes:
+      - krovara-ntfy-dev:/var/lib/ntfy
+
+  # Antivirus for uploads (ADR-022). clamd has no auth on its socket, so in
+  # prod it stays on the internal network, never exposed. In dev the Go API
+  # runs on the host, so we bind clamd to loopback only (like postgres:5433).
+  # Host port is 33310 (container port stays 3310). It MUST be > 15000: this
+  # machine's TCP dynamic-port range is 1024-15000 (`netsh int ipv4 show
+  # dynamicport tcp`), so Hyper-V/WinNAT randomly reserves blocks anywhere in
+  # that span and the reservation moves on every reboot — which is why 3310 and
+  # 13310 both failed intermittently with "access to a socket forbidden".
+  # A host port above 15000 is outside the dynamic range and stays bindable.
+  clamav:
+    image: clamav/clamav:stable
+    container_name: krovara-clamav-dev
+    ports:
+      - "127.0.0.1:33310:3310"
+    volumes:
+      - krovara-clamav-dev:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  krovara-pg-dev:
+  krovara-prosody-data:
+  krovara-meili-dev:
+  krovara-ntfy-dev:
+  krovara-clamav-dev:

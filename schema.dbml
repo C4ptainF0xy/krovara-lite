@@ -1,0 +1,579 @@
+// Krovara — schéma de la base (PostgreSQL 16)
+// Généré depuis migrations/. Colle dans https://dbdiagram.io pour le rendu.
+
+Table users {
+  id uuid [pk]
+  username text [unique, not null]
+  email text [unique, not null]
+  password_hash text
+  avatar_key text
+  created_at timestamptz
+}
+
+Table oauth_accounts {
+  id uuid [pk]
+  user_id uuid
+  provider text [not null]
+  provider_id text [not null]
+}
+
+Table sessions {
+  id uuid [pk]
+  user_id uuid
+  refresh_token text [unique, not null]
+  expires_at timestamptz [not null]
+  created_at timestamptz
+}
+
+Table spaces {
+  id uuid [pk]
+  owner_id uuid
+  name text [not null]
+  icon_key text
+  created_at timestamptz
+}
+
+Table channels {
+  id uuid [pk]
+  space_id uuid
+  name text [not null]
+  topic text
+  type text
+  position int
+  is_private boolean
+  created_at timestamptz
+}
+
+Table members {
+  id uuid [pk]
+  space_id uuid
+  user_id uuid
+  nickname text
+  joined_at timestamptz
+}
+
+Table roles {
+  id uuid [pk]
+  space_id uuid
+  name text [not null]
+  permissions bigint
+  color text
+  position int
+  is_everyone boolean
+}
+
+Table member_roles {
+  member_id uuid
+  role_id uuid
+}
+
+Table channel_overwrites {
+  channel_id uuid
+  role_id uuid
+  allow bigint
+  deny bigint
+}
+
+Table files {
+  id uuid [pk]
+  owner_id uuid
+  filename text [not null]
+  size bigint [not null]
+  mimetype text [not null]
+  path text [not null]
+  created_at timestamptz
+}
+
+Table invites {
+  id uuid [pk]
+  space_id uuid
+  creator_id uuid
+  code text [unique, not null]
+  max_uses int
+  uses int
+  expires_at timestamptz
+  created_at timestamptz
+}
+
+Table bans {
+  id uuid [pk]
+  space_id uuid
+  user_id uuid
+  moderator_id uuid
+  reason text
+  created_at timestamptz
+}
+
+Table audit_logs {
+  id uuid [pk]
+  space_id uuid
+  actor_id uuid
+  action text [not null]
+  target_id uuid
+  metadata jsonb
+  created_at timestamptz
+}
+
+Table webhooks {
+  id uuid [pk]
+  space_id uuid
+  channel_id uuid
+  name text [not null]
+  url text [not null]
+  secret text
+  events text[] [not null]
+  created_at timestamptz
+}
+
+Table reports {
+  id uuid [pk]
+  reporter_id uuid
+  target_type text [not null]
+  target_id uuid [not null]
+  reason text [not null]
+  status text
+  created_at timestamptz
+}
+
+Table xmpp_tokens {
+  token text [pk]
+  user_id uuid [not null]
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null]
+}
+
+Table bots {
+  id uuid [pk]
+  space_id uuid [not null]
+  name text [not null]
+  component_jid text [unique, not null]
+  secret_hash text [not null]
+  created_at timestamptz [not null]
+}
+
+Table devices {
+  id uuid [pk]
+  user_id uuid [not null]
+  name text [not null]
+  ntfy_topic text [not null]
+  created_at timestamptz [not null]
+}
+
+Table push_prefs {
+  user_id uuid [not null]
+  space_id uuid [not null]
+  scope text [not null]
+}
+
+Table message_pins {
+  id uuid [pk]
+  channel_id uuid [not null]
+  archive_id text [not null]
+  pinned_by uuid [not null]
+  note text [not null]
+  created_at timestamptz [not null]
+}
+
+Table saved_messages {
+  id uuid [pk]
+  user_id uuid [not null]
+  channel_id uuid [not null]
+  archive_id text [not null]
+  folder text [not null]
+  created_at timestamptz [not null]
+}
+
+Table channel_read_state {
+  user_id uuid [not null]
+  channel_id uuid [not null]
+  last_read_sort_id bigint [not null]
+  last_read_archive_id text [not null]
+  updated_at timestamptz [not null]
+}
+
+Table malicious_urls {
+  url_hash text [pk]
+  threat text
+  added_at timestamptz [not null]
+}
+
+Table threads {
+  id uuid [pk]
+  channel_id uuid [not null]
+  root_archive_id text [not null]
+  title text [not null]
+  created_by uuid [not null]
+  created_at timestamptz [not null]
+  last_activity_at timestamptz [not null]
+}
+
+Table thread_subscriptions {
+  user_id uuid [not null]
+  thread_id uuid [not null]
+  created_at timestamptz [not null]
+}
+
+Table categories {
+  id uuid [pk]
+  space_id uuid [not null]
+  name text [not null]
+  position int [not null]
+  created_at timestamptz [not null]
+}
+
+Table mod_actions {
+  id uuid [pk]
+  space_id uuid [not null]
+  target_user uuid [not null]
+  moderator_id uuid
+  action text [not null]
+  reason text
+  expires_at timestamptz
+  active boolean [not null]
+  created_at timestamptz [not null]
+}
+
+Table friendships {
+  id uuid [pk]
+  requester_id uuid [not null]
+  addressee_id uuid [not null]
+  status text [not null]
+  created_at timestamptz [not null]
+}
+
+Table blocks {
+  blocker_id uuid [not null]
+  blocked_id uuid [not null]
+  created_at timestamptz [not null]
+}
+
+Table notif_settings {
+  user_id uuid [not null]
+  scope_type text [not null]
+  scope_id uuid [not null]
+  level text [not null]
+  muted_until timestamptz
+  suppress_everyone boolean [not null]
+}
+
+Table inbox_items {
+  id uuid [pk]
+  user_id uuid [not null]
+  kind text [not null]
+  space_id uuid
+  channel_id uuid
+  archive_id text [not null]
+  author_id uuid
+  preview text
+  read boolean [not null]
+  created_at timestamptz [not null]
+}
+
+Table games {
+  id uuid [pk]
+  name text [not null]
+  cover_key text
+  status text [not null]
+  submitted_by uuid
+  reviewed_by uuid
+  reject_reason text
+  aliases text[] [not null]
+  created_at timestamptz [not null]
+}
+
+Table tasks {
+  id uuid [pk]
+  space_id uuid [not null]
+  channel_id uuid
+  source_archive_id text
+  title text [not null]
+  assignee_id uuid
+  due_at timestamptz
+  status text [not null]
+  created_by uuid
+  created_at timestamptz [not null]
+}
+
+Table api_tokens {
+  id uuid [pk]
+  user_id uuid [not null]
+  name text [not null]
+  token_hash text [unique, not null]
+  prefix text [not null]
+  scopes text[] [not null]
+  last_used_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table space_listings {
+  space_id uuid [pk]
+  category text [not null]
+  member_count int [not null]
+  listed_at timestamptz [not null]
+  delisted_at timestamptz
+}
+
+Table message_follows {
+  user_id uuid [not null]
+  channel_id uuid [not null]
+  archive_id text [not null]
+  created_at timestamptz [not null]
+}
+
+Table karma {
+  user_id uuid [not null]
+  space_id uuid [not null]
+  score integer [not null]
+  updated_at timestamptz [not null]
+}
+
+Table karma_events {
+  id uuid [pk]
+  space_id uuid [not null]
+  target_user uuid [not null]
+  source_user uuid [not null]
+  delta integer [not null]
+  reason text [not null]
+  created_at timestamptz [not null]
+}
+
+Table join_forms {
+  space_id uuid [pk]
+  enabled boolean [not null]
+  questions jsonb [not null]
+  auto_role_id uuid
+  updated_at timestamptz [not null]
+}
+
+Table join_requests {
+  id uuid [pk]
+  space_id uuid [not null]
+  user_id uuid [not null]
+  answers jsonb [not null]
+  status text [not null]
+  reviewed_by uuid
+  reviewed_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table saved_searches {
+  id uuid [pk]
+  user_id uuid [not null]
+  space_id uuid
+  name text [not null]
+  query text [not null]
+  created_at timestamptz [not null]
+}
+
+Table polls {
+  id uuid [pk]
+  space_id uuid [not null]
+  channel_id uuid [not null]
+  question text [not null]
+  created_by uuid [not null]
+  closed boolean [not null]
+  created_at timestamptz [not null]
+}
+
+Table poll_options {
+  id uuid [pk]
+  poll_id uuid [not null]
+  label text [not null]
+  position int [not null]
+}
+
+Table poll_votes {
+  poll_id uuid [not null]
+  option_id uuid [not null]
+  user_id uuid [not null]
+  voted_at timestamptz [not null]
+}
+
+Table events {
+  id uuid [pk]
+  space_id uuid [not null]
+  title text [not null]
+  description text
+  location text
+  starts_at timestamptz [not null]
+  created_by uuid [not null]
+  created_at timestamptz [not null]
+}
+
+Table event_rsvps {
+  event_id uuid [not null]
+  user_id uuid [not null]
+  status text [not null]
+  responded_at timestamptz [not null]
+}
+
+Table custom_emojis {
+  id uuid [pk]
+  space_id uuid [not null]
+  name text [not null]
+  file_key text [not null]
+  animated boolean [not null]
+  created_by uuid
+  created_at timestamptz [not null]
+}
+
+Table report_comments {
+  id uuid [pk]
+  report_id uuid [not null]
+  author_id uuid
+  body text [not null]
+  created_at timestamptz [not null]
+}
+
+Table email_change_tokens {
+  id uuid [pk]
+  user_id uuid [not null]
+  new_email text [not null]
+  token_hash text [unique, not null]
+  expires_at timestamptz [not null]
+  used_at timestamptz
+  created_at timestamptz [not null]
+}
+
+Table banned_identifiers {
+  id uuid [pk]
+  kind text [not null]
+  value text [not null]
+  reason text
+  banned_by uuid
+  created_at timestamptz [not null]
+}
+
+Table email_verifications {
+  user_id uuid [pk]
+  code_hash text [not null]
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null]
+}
+
+Table dm_groups {
+  id uuid [pk]
+  owner_id uuid [not null]
+  name text
+  icon_key text
+  created_at timestamptz [not null]
+}
+
+Table dm_group_members {
+  group_id uuid [not null]
+  user_id uuid [not null]
+  joined_at timestamptz [not null]
+}
+
+Table dm_group_messages {
+  id uuid [pk]
+  group_id uuid [not null]
+  author_id uuid [not null]
+  body text [not null]
+  created_at timestamptz [not null]
+}
+
+Table dm_group_invites {
+  code text [pk]
+  group_id uuid [not null]
+  created_by uuid [not null]
+  created_at timestamptz [not null]
+}
+
+// --- Relations ---
+Ref: oauth_accounts.user_id > users.id
+Ref: sessions.user_id > users.id
+Ref: spaces.owner_id > users.id
+Ref: channels.space_id > spaces.id
+Ref: members.space_id > spaces.id
+Ref: members.user_id > users.id
+Ref: roles.space_id > spaces.id
+Ref: member_roles.member_id > members.id
+Ref: member_roles.role_id > roles.id
+Ref: channel_overwrites.channel_id > channels.id
+Ref: channel_overwrites.role_id > roles.id
+Ref: files.owner_id > users.id
+Ref: invites.space_id > spaces.id
+Ref: invites.creator_id > users.id
+Ref: bans.space_id > spaces.id
+Ref: bans.user_id > users.id
+Ref: bans.moderator_id > users.id
+Ref: audit_logs.space_id > spaces.id
+Ref: audit_logs.actor_id > users.id
+Ref: webhooks.space_id > spaces.id
+Ref: webhooks.channel_id > channels.id
+Ref: reports.reporter_id > users.id
+Ref: xmpp_tokens.user_id > users.id
+Ref: bots.space_id > spaces.id
+Ref: devices.user_id > users.id
+Ref: push_prefs.user_id > users.id
+Ref: push_prefs.space_id > spaces.id
+Ref: message_pins.channel_id > channels.id
+Ref: message_pins.pinned_by > users.id
+Ref: saved_messages.user_id > users.id
+Ref: saved_messages.channel_id > channels.id
+Ref: channel_read_state.user_id > users.id
+Ref: channel_read_state.channel_id > channels.id
+Ref: threads.channel_id > channels.id
+Ref: threads.created_by > users.id
+Ref: thread_subscriptions.user_id > users.id
+Ref: thread_subscriptions.thread_id > threads.id
+Ref: categories.space_id > spaces.id
+Ref: mod_actions.space_id > spaces.id
+Ref: mod_actions.target_user > users.id
+Ref: mod_actions.moderator_id > users.id
+Ref: friendships.requester_id > users.id
+Ref: friendships.addressee_id > users.id
+Ref: blocks.blocker_id > users.id
+Ref: blocks.blocked_id > users.id
+Ref: notif_settings.user_id > users.id
+Ref: inbox_items.user_id > users.id
+Ref: inbox_items.space_id > spaces.id
+Ref: inbox_items.channel_id > channels.id
+Ref: games.submitted_by > users.id
+Ref: games.reviewed_by > users.id
+Ref: tasks.space_id > spaces.id
+Ref: tasks.channel_id > channels.id
+Ref: tasks.assignee_id > users.id
+Ref: tasks.created_by > users.id
+Ref: api_tokens.user_id > users.id
+Ref: space_listings.space_id > spaces.id
+Ref: message_follows.user_id > users.id
+Ref: message_follows.channel_id > channels.id
+Ref: karma.user_id > users.id
+Ref: karma.space_id > spaces.id
+Ref: karma_events.space_id > spaces.id
+Ref: karma_events.target_user > users.id
+Ref: karma_events.source_user > users.id
+Ref: join_forms.space_id > spaces.id
+Ref: join_forms.auto_role_id > roles.id
+Ref: join_requests.space_id > spaces.id
+Ref: join_requests.user_id > users.id
+Ref: join_requests.reviewed_by > users.id
+Ref: saved_searches.user_id > users.id
+Ref: saved_searches.space_id > spaces.id
+Ref: polls.space_id > spaces.id
+Ref: polls.channel_id > channels.id
+Ref: polls.created_by > users.id
+Ref: poll_options.poll_id > polls.id
+Ref: poll_votes.poll_id > polls.id
+Ref: poll_votes.option_id > poll_options.id
+Ref: poll_votes.user_id > users.id
+Ref: events.space_id > spaces.id
+Ref: events.created_by > users.id
+Ref: event_rsvps.event_id > events.id
+Ref: event_rsvps.user_id > users.id
+Ref: custom_emojis.space_id > spaces.id
+Ref: custom_emojis.created_by > users.id
+Ref: report_comments.report_id > reports.id
+Ref: report_comments.author_id > users.id
+Ref: email_change_tokens.user_id > users.id
+Ref: banned_identifiers.banned_by > users.id
+Ref: email_verifications.user_id > users.id
+Ref: dm_groups.owner_id > users.id
+Ref: dm_group_members.group_id > dm_groups.id
+Ref: dm_group_members.user_id > users.id
+Ref: dm_group_messages.group_id > dm_groups.id
+Ref: dm_group_messages.author_id > users.id
+Ref: dm_group_invites.group_id > dm_groups.id
+Ref: dm_group_invites.created_by > users.id

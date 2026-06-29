@@ -1,0 +1,42 @@
+# Go
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Env
+.env
+.env.local
+.env.production
+
+# Data
+/data/
+/certs/
+
+# Node
+node_modules/
+web/dist/
+web/.svelte-kit/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dev runtime
+.dev-logs/
+.dev-files/
+
+# Deploy artifacts & signing secrets — never commit
+krovara-deploy.tar.gz
+krovara-deploy.zip
+*.keystore
+
+# Stray screenshots / scratch captures (kept out of the repo)
+/screens/
+/*.png

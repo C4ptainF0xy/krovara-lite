@@ -1,0 +1,226 @@
+# Krovara — production stack. Bring up with:
+#   cp .env.production.example .env && $EDITOR .env
+#   docker compose up -d
+#
+# Caddy terminates TLS for KROVARA_DOMAIN and proxies to api + prosody.
+# Static SvelteKit bundle is built by the `web` image and mounted into
+# Caddy's /srv via a named volume.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-krovara}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB:       ${POSTGRES_DB:-krovara}
+    volumes:
+      - krovara-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-krovara} -d ${POSTGRES_DB:-krovara}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    image: migrate/migrate:4
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=pgx5://${POSTGRES_USER:-krovara}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-krovara}?sslmode=disable
+      - up
+
+  api:
+    build: { context: ., target: api }
+    image: krovara/api:${KROVARA_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate:  { condition: service_completed_successfully }
+    environment:
+      KROVARA_DB_DSN: postgres://${POSTGRES_USER:-krovara}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-krovara}?sslmode=disable
+      KROVARA_JWT_SECRET: ${KROVARA_JWT_SECRET:?required}
+      KROVARA_HTTP_ADDR: :8080
+      KROVARA_INTERNAL_ADDR: 127.0.0.1:8090
+      # Front base URL — cibles de redirection Stripe + liens de confirmation email.
+      KROVARA_APP_URL: https://${KROVARA_DOMAIN}
+      # Derrière Caddy/Cloudflare : lire la vraie IP client (rate-limit + anti-double-compte).
+      KROVARA_TRUST_PROXY: ${KROVARA_TRUST_PROXY:-true}
+      KROVARA_XMPP_DOMAIN:  ${KROVARA_DOMAIN}
+      KROVARA_XMPP_MUC_HOST: conference.${KROVARA_DOMAIN}
+      # OAuth (vide → provider désactivé).
+      KROVARA_OAUTH_GOOGLE_CLIENT_ID:     ${KROVARA_OAUTH_GOOGLE_CLIENT_ID:-}
+      KROVARA_OAUTH_GOOGLE_CLIENT_SECRET: ${KROVARA_OAUTH_GOOGLE_CLIENT_SECRET:-}
+      KROVARA_OAUTH_GOOGLE_REDIRECT_URL:  ${KROVARA_OAUTH_GOOGLE_REDIRECT_URL:-}
+      KROVARA_OAUTH_GITHUB_CLIENT_ID:     ${KROVARA_OAUTH_GITHUB_CLIENT_ID:-}
+      KROVARA_OAUTH_GITHUB_CLIENT_SECRET: ${KROVARA_OAUTH_GITHUB_CLIENT_SECRET:-}
+      KROVARA_OAUTH_GITHUB_REDIRECT_URL:  ${KROVARA_OAUTH_GITHUB_REDIRECT_URL:-}
+      # Captcha (ADR-030) + signal IP anti-double-compte (ADR-031) — vide → désactivé.
+      KROVARA_TURNSTILE_SECRET: ${KROVARA_TURNSTILE_SECRET:-}
+      KROVARA_SIGNUP_IP_KEY:    ${KROVARA_SIGNUP_IP_KEY:-}
+      # Facturation Krovara+ (ADR-037) — vide → routes billing désactivées.
+      KROVARA_STRIPE_SECRET_KEY:     ${KROVARA_STRIPE_SECRET_KEY:-}
+      KROVARA_STRIPE_WEBHOOK_SECRET: ${KROVARA_STRIPE_WEBHOOK_SECRET:-}
+      KROVARA_STRIPE_PRICE_ID:       ${KROVARA_STRIPE_PRICE_ID:-}
+      # Email transactionnel (ADR-038) — vide → lien de confirmation loggé au lieu d'être envoyé.
+      KROVARA_RESEND_API_KEY: ${KROVARA_RESEND_API_KEY:-}
+      KROVARA_EMAIL_FROM:     ${KROVARA_EMAIL_FROM:-Krovara <onboarding@resend.dev>}
+      # Recherche (Meilisearch) — vide → recherche désactivée.
+      KROVARA_MEILI_HOST: ${KROVARA_MEILI_HOST:-http://meilisearch:7700}
+      MEILI_MASTER_KEY:   ${MEILI_MASTER_KEY:-}
+      # GIF (ADR-021) — vide → picker GIF désactivé.
+      KROVARA_KLIPY_API_KEY: ${KROVARA_KLIPY_API_KEY:-}
+      # Google Safe Browsing — scan des liens malveillants (optionnel).
+      KROVARA_SAFE_BROWSING_KEY: ${KROVARA_SAFE_BROWSING_KEY:-}
+      # TURN/STUN annoncés au client (ADR VoIP) — CSV d'URIs turn:.
+      KROVARA_TURN_URIS:   ${KROVARA_TURN_URIS:-}
+      COTURN_AUTH_SECRET:  ${COTURN_AUTH_SECRET:-}
+      # Antivirus (ADR-022) — vide → uploads marqués clean à l'insert.
+      KROVARA_CLAMAV_ADDR: ${KROVARA_CLAMAV_ADDR:-}
+      # CORS pour les clients empaquetés (Tauri desktop/Android). Vide → no-op
+      # (le web same-origin n'en a pas besoin). Cf. docs/DESKTOP-MOBILE.md.
+      KROVARA_CORS_ORIGINS: ${KROVARA_CORS_ORIGINS:-}
+    expose: ["8080"]
+    volumes:
+      - krovara-files:/data/krovara
+
+  worker:
+    build: { context: ., target: worker }
+    image: krovara/worker:${KROVARA_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate:  { condition: service_completed_successfully }
+    environment:
+      KROVARA_DB_DSN:  postgres://${POSTGRES_USER:-krovara}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-krovara}?sslmode=disable
+      RESEND_API_KEY:  ${RESEND_API_KEY:-}
+    volumes:
+      - krovara-files:/data/krovara
+
+  voip:
+    build: { context: ., target: voip }
+    image: krovara/voip:${KROVARA_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      KROVARA_VOIP_ADDR: :8083
+      # MUST match the api service — the SFU validates the same access JWT.
+      KROVARA_JWT_SECRET: ${KROVARA_JWT_SECRET:?required}
+      KROVARA_VOIP_ALLOWED_ORIGINS: https://${KROVARA_DOMAIN}
+    expose: ["8083"]
+
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    restart: unless-stopped
+    command: serve
+    environment:
+      NTFY_BASE_URL: ${KROVARA_NTFY_BASE_URL:-http://localhost:8081}
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_ATTACHMENT_CACHE_DIR: "/var/lib/ntfy/attachments"
+      NTFY_CACHE_FILE: "/var/lib/ntfy/cache.db"
+    expose: ["80"]
+    volumes:
+      - krovara-ntfy:/var/lib/ntfy
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.13
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?required}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+    expose: ["7700"]
+    volumes:
+      - krovara-meili:/meili_data
+
+  coturn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    network_mode: host
+    # `host` mode is the simplest way to handle the large UDP relay port
+    # range (49152-49199). On hosts where host mode is unavailable, switch
+    # to a bridge network and expose each port individually.
+    environment:
+      COTURN_AUTH_SECRET: ${COTURN_AUTH_SECRET:?required}
+      KROVARA_DOMAIN:     ${KROVARA_DOMAIN:?required}
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+
+  prosody:
+    image: prosody/prosody:latest
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PROSODY_DB_HOST:     postgres
+      PROSODY_DB_PORT:     "5432"
+      PROSODY_DB_NAME:     ${POSTGRES_DB:-krovara}
+      PROSODY_DB_USER:     ${POSTGRES_USER:-krovara}
+      PROSODY_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      PROSODY_HTTP_EXTERNAL_URL: https://${KROVARA_DOMAIN}/
+      # Internal API auth callback: the api container exposes
+      # 127.0.0.1:8090/internal/xmpp/auth but only inside its own netns.
+      # The compose service network gives Prosody DNS access to "api":
+      KROVARA_XMPP_AUTH_URL: http://api:8090/internal/xmpp/auth
+    volumes:
+      - ./prosody/prosody.cfg.lua:/etc/prosody/prosody.cfg.lua:ro
+      - krovara-prosody:/var/lib/prosody
+    expose: ["5222", "5269", "5280"]
+    healthcheck:
+      test: ["CMD", "prosodyctl", "status"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ./web
+      args:
+        # Build-time: bake the Turnstile site key into the static SPA (see web/Dockerfile).
+        PUBLIC_TURNSTILE_SITEKEY: ${PUBLIC_TURNSTILE_SITEKEY:-}
+    image: krovara/web:${KROVARA_VERSION:-latest}
+    restart: "no"
+    # The image's only purpose is to populate the krovara-web-static volume
+    # with the built SPA, then exit.
+    command: ["sh", "-c", "cp -R /srv/. /out/ && echo 'web bundle staged'"]
+    volumes:
+      - krovara-web-static:/out
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_started }
+      voip: { condition: service_started }
+      prosody: { condition: service_started }
+      web: { condition: service_completed_successfully }
+    environment:
+      KROVARA_DOMAIN:    ${KROVARA_DOMAIN:?required}
+      KROVARA_TLS_EMAIL: ${KROVARA_TLS_EMAIL:?required}
+      # Vhost de la page de statut (Uptime Kuma, overlay monitoring). Nécessite
+      # son propre enregistrement DNS. Cf. caddy/Caddyfile + docs/DEPLOYMENT.md.
+      KROVARA_STATUS_DOMAIN: ${KROVARA_STATUS_DOMAIN:-status.krovara.com}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "5222:5222"   # XMPP c2s (optional — clients can also speak WS only)
+      - "5269:5269"   # XMPP s2s (federation)
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - krovara-caddy-data:/data
+      - krovara-caddy-config:/config
+      - krovara-web-static:/srv:ro
+
+volumes:
+  krovara-pg:
+  krovara-prosody:
+  krovara-files:
+  krovara-caddy-data:
+  krovara-caddy-config:
+  krovara-web-static:
+  krovara-meili:
+  krovara-ntfy:

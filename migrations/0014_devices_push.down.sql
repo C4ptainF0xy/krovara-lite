@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS push_prefs;
+DROP TABLE IF EXISTS devices;

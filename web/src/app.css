@@ -1,0 +1,413 @@
+/* design system Krovara — dark-first, violet.
+ * les tokens ici = source de vérité. les composants DOIVENT les utiliser,
+ * jamais les couleurs Tailwind brutes (slate-900, violet-600...). */
+@import '@fontsource-variable/onest';
+@import 'tailwindcss';
+
+@theme {
+  /* ---- Élévation : rampe neutre OKLCH teintée violet (teinte 285°) ----
+   * Plus clair = plus haut (Material 3 dark theme). Voir
+   * docs/design/COLOR-SYSTEM.md pour le rationale complet. */
+  --color-base: #0f0f14; /* élévation 0 — fond app (charte, exact) */
+  --color-surface: oklch(0.205 0.013 285); /* élévation 1 — panneaux, cards (≈ #1A1A22) */
+  --color-elevated: oklch(0.255 0.016 285); /* élévation 2 — survol, surfaces hautes */
+  --color-overlay: oklch(0.3 0.017 285); /* élévation 3 — menus, dropdowns, actif */
+
+  /* ---- Brand violet (§2/§3) ----
+   * brand = identité exacte (non-texte) ; primary = ajusté contraste pour
+   * le texte blanc (4.78:1) ; voir le compromis documenté. */
+  --color-brand: #7a7398; /* identité Krovara — pastille, focus, aplats */
+  --color-primary: #756e92; /* fond solide, label blanc ≥4.5:1 */
+  --color-primary-hover: #8e86ae; /* affordance survol (état transitoire) */
+  --color-accent: #a79fcb; /* liens, texte violet clair (6.7:1 sur base) */
+
+  /* ---- Texte ---- */
+  --color-content: oklch(0.96 0.006 285); /* texte principal (~17:1 sur base) */
+  --color-muted: oklch(0.705 0.014 285); /* texte secondaire (~6:1 sur surface) */
+
+  /* ---- Bordures ---- */
+  --color-border: oklch(0.285 0.014 285); /* séparateurs fins */
+  --color-border-strong: oklch(0.36 0.016 285); /* bordures interactives */
+
+  /* ---- États UI (§3) ---- */
+  --color-success: #4caf50;
+  --color-danger: #e5484d;
+  --color-warning: #f5a623;
+
+  /* ---- Typographie (§4) — Onest ---- */
+  --font-sans: 'Onest Variable', 'Onest', system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+
+  /* Échelle (§4 Hiérarchie) */
+  --text-title: 2rem; /* 32px Bold      */
+  --text-title--line-height: 1.15;
+  --text-subtitle: 1.25rem; /* 20px Semibold */
+  --text-subtitle--line-height: 1.3;
+  --text-body: 0.9375rem; /* 15px Regular  */
+  --text-body--line-height: 1.55;
+  --text-label: 0.8125rem; /* 13px Medium   */
+  --text-label--line-height: 1.4;
+
+  /* ---- Rayons ---- */
+  --radius-sm: 0.375rem;
+  --radius: 0.625rem; /* 10px — boutons / inputs */
+  --radius-lg: 0.875rem; /* cards */
+  --radius-xl: 1.125rem;
+
+  /* ---- Motion (§10) — rapide, fluide, jamais intrusive ---- */
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-hover: 150ms;
+
+  --animate-fade-in: fade-in 180ms var(--ease-smooth);
+  --animate-slide-in: slide-in 220ms var(--ease-smooth);
+}
+
+@keyframes msg-flash {
+  0% {
+    background-color: color-mix(in srgb, var(--color-brand) 30%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@layer base {
+  /* ---- Safe-area (encoches / barres système mobile) ----
+   * L'app Android est en edge-to-edge (MainActivity.enableEdgeToEdge) : le
+   * contenu passe SOUS la barre de statut et la barre de navigation. On expose
+   * les insets comme variables et des utilitaires pour reculer le contenu sans
+   * sacrifier le fond plein-écran. Fallback 0px sur desktop/web. */
+  :root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+  }
+  .pt-safe {
+    padding-top: var(--safe-top);
+  }
+  .pb-safe {
+    padding-bottom: var(--safe-bottom);
+  }
+  .pl-safe {
+    padding-left: var(--safe-left);
+  }
+  .pr-safe {
+    padding-right: var(--safe-right);
+  }
+  /* Variantes additives : ajoutent l'inset à un padding existant. */
+  .pt-safe-3 {
+    padding-top: calc(0.75rem + var(--safe-top));
+  }
+  .pb-safe-2 {
+    padding-bottom: calc(0.5rem + var(--safe-bottom));
+  }
+  /* Pour les éléments fixés en haut/bas de l'écran. */
+  .top-safe {
+    top: var(--safe-top);
+  }
+  .bottom-safe {
+    bottom: var(--safe-bottom);
+  }
+
+  html {
+    color-scheme: dark;
+    /* Échelle UI pilotée par les préférences (stores/prefs.ts). Tout l'espacement
+     * et la typo étant en rem, modifier ceci redimensionne l'interface entière. */
+    font-size: var(--app-font-size, 16px);
+  }
+
+  /* Thème OLED : noir pur pour les écrans à contraste infini. */
+  html.theme-oled {
+    --color-base: #000;
+  }
+  html.theme-oled body {
+    background: #000;
+  }
+
+  /* Thème clair (F4) — réécrit la rampe d'élévation et le texte. L'identité
+   * violette est conservée mais l'accent est assombri pour rester lisible (AA)
+   * sur fond clair. Active aussi color-scheme:light via prefs.apply(). */
+  html.theme-light {
+    --color-base: #f6f6fa; /* élévation 0 — fond app */
+    --color-surface: #ffffff; /* élévation 1 — panneaux, cards */
+    --color-elevated: #ececf3; /* élévation 2 — survol */
+    --color-overlay: #ffffff; /* élévation 3 — menus, dropdowns */
+    --color-content: #1b1b24; /* texte principal (~14:1 sur base) */
+    --color-muted: #5b5b6b; /* texte secondaire (~5.4:1 sur surface) */
+    --color-border: #e2e2ec; /* séparateurs fins */
+    --color-border-strong: #cfcfdc; /* bordures interactives */
+    --color-accent: #5f5594; /* liens — violet assombri (~5.6:1 sur blanc) */
+    --color-primary-hover: #635b85;
+  }
+  html.theme-light body {
+    background: var(--color-base);
+  }
+
+  /* Densité compacte (§G) : resserre le rythme vertical du fil. Cible des
+   * classes-crochet posées par MessageList plutôt que de surcharger Tailwind. */
+  html.density-compact .msg-row {
+    margin-top: 0.0625rem;
+  }
+  html.density-compact .msg-row.msg-head {
+    margin-top: 0.75rem;
+    padding-top: 0;
+  }
+  html.density-compact .msg-scroll {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  /* Respecte la préférence d'accessibilité (§7) — désactive les animations.
+   * Déclenché soit par le réglage app (html.reduce-motion), soit par la
+   * préférence système (prefers-reduced-motion) — WCAG 2.3.3. */
+  html.reduce-motion *,
+  html.reduce-motion *::before,
+  html.reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Cible de focus visible homogène pour la navigation clavier (§7 a11y). */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+
+  body {
+    /* Dégradé de marque (§3) */
+    background: linear-gradient(135deg, #0f0f14, #1a1a22) fixed;
+    color: var(--color-content);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-brand) 40%, transparent);
+    color: #fff;
+  }
+
+  /* Scrollbar discrète, cohérente dark-first */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-elevated) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-elevated);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-strong);
+    background-clip: padding-box;
+  }
+
+  /* Masque la scrollbar (nav mobile horizontale) tout en gardant le scroll. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+
+  /* Flash quand on saute vers un message (clic sur une citation de réponse). */
+  .msg-flash {
+    animation: msg-flash 1.3s var(--ease-smooth);
+    border-radius: var(--radius);
+  }
+
+  /* Blocs de code (session 26-b) — numéros de ligne, teinte diff, repli. */
+  .code-pre {
+    counter-reset: ln;
+  }
+  .code-ln {
+    display: block;
+    position: relative;
+    padding: 0 0.75rem;
+  }
+  .code-pre.code-numbered .code-ln {
+    padding-left: 3.25rem;
+  }
+  .code-pre.code-numbered .code-ln::before {
+    content: counter(ln);
+    counter-increment: ln;
+    position: absolute;
+    left: 0;
+    width: 2.5rem;
+    text-align: right;
+    color: var(--color-muted);
+    opacity: 0.45;
+    user-select: none;
+  }
+  .code-ln.code-add {
+    background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  }
+  .code-ln.code-del {
+    background: color-mix(in srgb, var(--color-danger) 16%, transparent);
+  }
+  /* Bloc long : hauteur bornée jusqu'au dépliage (classe basculée dans MessageList). */
+  .code-foldable .code-scroll {
+    max-height: 22rem;
+    overflow-y: auto;
+  }
+  .code-foldable.code-open .code-scroll {
+    max-height: none;
+  }
+
+  /* Callouts (> [!NOTE] ...) — bordure gauche + tête colorée par type (session 26-c). */
+  .callout {
+    background: color-mix(in srgb, var(--color-surface) 65%, transparent);
+    border-left: 3px solid var(--color-border-strong);
+  }
+  .callout-note {
+    border-left-color: var(--color-accent);
+  }
+  .callout-note .callout-head {
+    color: var(--color-accent);
+  }
+  .callout-tip {
+    border-left-color: var(--color-success);
+  }
+  .callout-tip .callout-head {
+    color: var(--color-success);
+  }
+  .callout-important {
+    border-left-color: var(--color-primary);
+  }
+  .callout-important .callout-head {
+    color: var(--color-accent);
+  }
+  .callout-warning {
+    border-left-color: var(--color-warning);
+  }
+  .callout-warning .callout-head {
+    color: var(--color-warning);
+  }
+  .callout-danger {
+    border-left-color: var(--color-danger);
+  }
+  .callout-danger .callout-head {
+    color: var(--color-danger);
+  }
+  .callout-spoiler .callout-head {
+    color: var(--color-muted);
+  }
+
+  /* Badge d'horodatage <t:...> — discret, distinct du texte courant. */
+  .ts-badge {
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    padding: 0 0.25em;
+    color: var(--color-accent);
+    white-space: nowrap;
+  }
+
+  /* Emoji custom de serveur (:name:) — vignette inline alignée au texte. Une
+     ligne seule d'emojis les agrandit (façon Discord « jumbo »). */
+  .inline-emoji {
+    display: inline-block;
+    width: 1.4em;
+    height: 1.4em;
+    vertical-align: -0.3em;
+    object-fit: contain;
+  }
+
+  /* Jumbo: a message that is only emoji renders them ~2x bigger (Discord-like). */
+  .msg-jumbo {
+    font-size: 2.2rem;
+    line-height: 1.15;
+  }
+  .msg-jumbo .inline-emoji {
+    width: 2.2rem;
+    height: 2.2rem;
+    vertical-align: -0.2em;
+  }
+
+  /* Spoiler (||texte||) — masqué jusqu'au survol/focus, ou au clic (sticky). */
+  .spoiler {
+    background: var(--color-elevated);
+    color: transparent;
+    border-radius: 4px;
+    padding: 0 0.2em;
+    cursor: pointer;
+    transition: color 120ms var(--ease-smooth), background-color 120ms var(--ease-smooth);
+  }
+  .spoiler:hover,
+  .spoiler:focus-visible,
+  .spoiler.revealed {
+    color: inherit;
+    background: var(--color-overlay);
+  }
+
+  /* Lien signalé malveillant (URLhaus, ADR-022) — clic ouvre un interstitiel. */
+  .link-flagged {
+    color: var(--color-danger);
+    text-decoration-style: dashed;
+    text-decoration-color: var(--color-danger);
+    cursor: pointer;
+  }
+  .link-flagged::before {
+    content: '⚠ ';
+  }
+
+  /* Spoiler de bloc (> [!SPOILER]) — corps flouté jusqu'au clic. */
+  .spoiler-block {
+    filter: blur(6px);
+    cursor: pointer;
+    user-select: none;
+    transition: filter 150ms var(--ease-smooth);
+  }
+  .spoiler-block.revealed {
+    filter: none;
+    cursor: auto;
+    user-select: auto;
+  }
+}

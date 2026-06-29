@@ -1,0 +1,5 @@
+DROP INDEX IF EXISTS idx_bans_space_user;
+DROP INDEX IF EXISTS idx_invites_code;
+DROP TABLE IF EXISTS bans;
+DROP TABLE IF EXISTS invites;
+DROP TABLE IF EXISTS files;
